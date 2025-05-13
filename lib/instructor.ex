@@ -422,6 +422,7 @@ defmodule Instructor do
     max_retries = Keyword.get(params, :max_retries)
     mode = Keyword.get(params, :mode, :tools)
     params = params_for_mode(mode, response_model, params)
+    dbg(params)
 
     model =
       if is_ecto_schema(response_model) do
@@ -613,7 +614,13 @@ defmodule Instructor do
     quote do
       use Instructor.Validator
 
+      # Register module attributes
       Module.register_attribute(__MODULE__, :llm_doc, persist: true, accumulate: true)
+      Module.register_attribute(__MODULE__, :field_descriptions, accumulate: true)
+
+      # Ensure field/3 doesn't conflict by using a helper macro
+      import Instructor, only: [with_description: 3]
+      @before_compile Instructor
 
       def __llm_doc__ do
         case __MODULE__.__info__(:attributes)[:llm_doc] do
@@ -621,6 +628,31 @@ defmodule Instructor do
           _ -> nil
         end
       end
+    end
+  end
+
+  defmacro __before_compile__(_env) do
+    quote do
+      def __field_descriptions__ do
+        @field_descriptions
+      end
+    end
+  end
+
+  # Rename the macro to avoid conflict
+  defmacro with_description(name, type, opts \\ []) do
+    quote do
+      description = Keyword.get(unquote(opts), :description)
+
+      if description do
+        @field_descriptions {unquote(name), description}
+      end
+
+      Ecto.Schema.field(
+        unquote(name),
+        unquote(type),
+        Keyword.delete(unquote(opts), :description)
+      )
     end
   end
 end
