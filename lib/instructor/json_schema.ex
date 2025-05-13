@@ -129,7 +129,14 @@ defmodule Instructor.JSONSchema do
 
   defp bfs_from_ecto_schema([ecto_schema | rest], seen_schemas)
        when is_ecto_schema(ecto_schema) do
-    seen_schemas = MapSet.put(seen_schemas, ecto_schema)
+    # Get field descriptions if they exist
+    field_descriptions =
+      if function_exported?(ecto_schema, :__field_descriptions__, 0) do
+        ecto_schema.__field_descriptions__()
+        |> Enum.into(%{})
+      else
+        %{}
+      end
 
     properties =
       ecto_schema.__schema__(:fields)
@@ -138,9 +145,22 @@ defmodule Instructor.JSONSchema do
         value = for_type(type)
         value = Map.merge(%{title: Atom.to_string(field)}, value)
 
+        # Add the description from our field descriptions if available
+        custom_description = Map.get(field_descriptions, field)
+        dbg(custom_description)
+
+        value =
+          if custom_description do
+            Map.put(value, :description, custom_description)
+          else
+            value
+          end
+
         {field, value}
       end)
       |> Enum.into(%{})
+
+    dbg(properties)
 
     associations =
       ecto_schema.__schema__(:associations)
@@ -200,9 +220,48 @@ defmodule Instructor.JSONSchema do
 
   defp bfs_from_ecto_schema([ecto_types | rest], seen_schemas)
        when is_ecto_types(ecto_types) do
+    dbg(ecto_types)
+
+    # Check if this is coming from a module with field descriptions
+    parent_module = Map.get(ecto_types, :__struct__)
+
+    # Get field descriptions if available
+    field_descriptions =
+      if parent_module && function_exported?(parent_module, :__field_descriptions__, 0) do
+        parent_module.__field_descriptions__()
+        |> Enum.into(%{})
+      else
+        %{}
+      end
+
     properties =
       for {field, type} <- ecto_types, into: %{} do
-        {field, for_type(type)}
+        value = for_type(type)
+
+        # First try to get description from field_descriptions
+        custom_description = Map.get(field_descriptions, field)
+        dbg(custom_description)
+        dbg(field_descriptions)
+        dbg(field)
+        # If not found, try the old way (from type options)
+        custom_description =
+          if is_nil(custom_description) do
+            case type do
+              {_type, opts} when is_list(opts) -> Keyword.get(opts, :description)
+              _ -> nil
+            end
+          else
+            custom_description
+          end
+
+        value =
+          if custom_description do
+            Map.put(value, "description", custom_description)
+          else
+            value
+          end
+
+        {field, value}
       end
 
     required = Map.keys(properties) |> Enum.sort()
@@ -447,7 +506,8 @@ defmodule Instructor.JSONSchema do
     |> maybe_call_with_path(fun, path, opts)
   end
 
-  defp do_traverse_and_update(tree, fun, path, opts), do: maybe_call_with_path(tree, fun, path, opts)
+  defp do_traverse_and_update(tree, fun, path, opts),
+    do: maybe_call_with_path(tree, fun, path, opts)
 
   defp maybe_call_with_path(value, fun, path, opts) do
     if Keyword.get(opts, :include_path, false) do
