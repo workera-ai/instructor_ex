@@ -16,6 +16,31 @@ defmodule Instructor do
   #{readme_docs}
   """
 
+  # Instructor.chat_completion(
+  #   model: "gpt-4o",
+  #   response_model: WeatherReport,
+  #   messages: [
+  #     %{role: "user", content: "What's the weather like in New York?"}
+  #   ],
+  #   functions: [
+  #     %{
+  #       "name" => "get_weather",
+  #       "description" => "Get current weather for a location",
+  #       "parameters" => %{
+  #         "type" => "object",
+  #         "properties" => %{
+  #           "location" => %{"type" => "string", "description" => "City name"}
+  #         },
+  #         "required" => ["location"]
+  #       }
+  #     }
+  #   ],
+  #   function_handler: fn name, args ->
+  #     dbg(name)
+  #     dbg(args)
+  #     %{"temperature" => 72.5, "conditions" => "sunny"}
+  #   end
+  # )
   defguardp is_ecto_schema(mod) when is_atom(mod)
 
   @doc """
@@ -56,7 +81,21 @@ defmodule Instructor do
   There are two main streaming modes available. array streaming and partial streaming.
 
   Partial streaming will emit the record multiple times until it's complete.
-
+  Instructor.chat_completion(
+      model: "gpt-4o-mini",
+      response_model: %{name: :string, recipe: :string},
+      max_retries: 2,
+      messages: [
+        %{
+          role: "system",
+          content: "You are a helpful cooking assistant that extracts recipe information."
+        },
+        %{
+          role: "user",
+          content: "Please provide a recipe for a simple dish"
+        }
+      ]
+    )
       iex> Instructor.chat_completion(
       ...>   model: "gpt-4o-mini",
       ...>   response_model: {:partial, %{name: :string, birth_date: :date}}
@@ -122,6 +161,9 @@ defmodule Instructor do
           | {:error, String.t()}
           | stream()
   def chat_completion(params, config \\ nil) do
+    {function_handler, params} = Keyword.pop(params, :function_handler)
+    {functions, params} = Keyword.pop(params, :functions, [])
+
     params =
       params
       |> Keyword.put_new(:max_retries, 0)
@@ -130,31 +172,107 @@ defmodule Instructor do
     is_stream = Keyword.get(params, :stream, false)
     response_model = Keyword.fetch!(params, :response_model)
 
-    case {response_model, is_stream} do
-      {{:partial, {:array, response_model}}, true} ->
-        do_streaming_partial_array_chat_completion(response_model, params, config)
+    if function_handler && is_function(function_handler, 2) do
+      # Pass the extracted values separately rather than in params
+      handle_function_calling_flow(params, functions, function_handler, config)
+    else
+      case {response_model, is_stream} do
+        {{:partial, {:array, response_model}}, true} ->
+          do_streaming_partial_array_chat_completion(response_model, params, config)
 
-      {{:partial, response_model}, true} ->
-        do_streaming_partial_chat_completion(response_model, params, config)
+        {{:partial, response_model}, true} ->
+          do_streaming_partial_chat_completion(response_model, params, config)
 
-      {{:array, response_model}, true} ->
-        do_streaming_array_chat_completion(response_model, params, config)
+        {{:array, response_model}, true} ->
+          do_streaming_array_chat_completion(response_model, params, config)
 
-      {{:array, response_model}, false} ->
-        params = Keyword.put(params, :stream, true)
+        {{:array, response_model}, false} ->
+          params = Keyword.put(params, :stream, true)
 
-        do_streaming_array_chat_completion(response_model, params, config)
-        |> Enum.to_list()
+          do_streaming_array_chat_completion(response_model, params, config)
+          |> Enum.to_list()
 
-      {response_model, false} ->
-        do_chat_completion(response_model, params, config)
+        {response_model, false} ->
+          do_chat_completion(response_model, params, config)
 
-      {_, true} ->
-        raise """
-        Streaming not supported for response_model: #{inspect(response_model)}.
+        {_, true} ->
+          raise """
+          Streaming not supported for response_model: #{inspect(response_model)}.
 
-        Make sure the response_model is a module that uses `Ecto.Schema` or is a valid Schemaless Ecto type definition.
-        """
+          Make sure the response_model is a module that uses `Ecto.Schema` or is a valid Schemaless Ecto type definition.
+          """
+      end
+    end
+  end
+
+  defp handle_function_calling_flow(params, functions, function_handler, config) do
+    response_model = Keyword.fetch!(params, :response_model)
+
+    # Set up parameters for a single request with tools
+    params_with_mode = params_for_mode(:tools, response_model, params, functions)
+
+    # Make a single API call
+    case do_adapter_chat_completion(params_with_mode, config) do
+      {:ok, raw_response, content} ->
+        # Extract the function call from the response body
+        response_body =
+          case raw_response do
+            %Req.Response{body: body} -> body
+            _ -> raw_response
+          end
+
+        # Try to extract function call details
+        case extract_function_call_from_body(response_body) do
+          {function_name, arguments, tool_call_id} ->
+            # Execute the function handler with the extracted arguments
+            function_result = function_handler.(function_name, arguments)
+
+            # Return the function call information and result
+            {:ok,
+             %{
+               function_name: function_name,
+               arguments: arguments,
+               tool_call_id: tool_call_id,
+               result: function_result,
+               raw_response: response_body
+             }}
+
+          nil ->
+            # No function call detected, try to validate the response against schema
+            model =
+              if is_ecto_schema(response_model),
+                do: response_model.__struct__(),
+                else: {%{}, response_model}
+
+            case cast_all(model, content) do
+              %Ecto.Changeset{valid?: true} = changeset ->
+                # Valid response that matches the schema
+                {:ok, Ecto.Changeset.apply_changes(changeset)}
+
+              %Ecto.Changeset{} = changeset ->
+                # Invalid response
+                {:error, changeset}
+            end
+        end
+
+      error ->
+        error
+    end
+  end
+
+  # Helper function to extract function call details
+  defp extract_function_call_from_body(body) do
+    try do
+      tool_calls = get_in(body, ["choices", Access.at(0), "message", "tool_calls"])
+
+      if tool_calls && length(tool_calls) > 0 do
+        %{"id" => id, "function" => %{"name" => name, "arguments" => args}} = hd(tool_calls)
+        {name, Jason.decode!(args), id}
+      else
+        nil
+      end
+    rescue
+      _ -> nil
     end
   end
 
@@ -497,7 +615,7 @@ defmodule Instructor do
     end
   end
 
-  defp params_for_mode(mode, response_model, params) do
+  defp params_for_mode(mode, response_model, params, custom_functions \\ []) do
     json_schema = JSONSchema.from_ecto_schema(response_model)
 
     params =
@@ -567,22 +685,35 @@ defmodule Instructor do
         })
 
       :tools ->
-        params
-        |> Keyword.put(:tools, [
-          %{
-            type: "function",
-            function: %{
-              "description" =>
-                "Correctly extracted `Schema` with all the required parameters with correct types",
-              "name" => "Schema",
-              "parameters" => json_schema |> Jason.decode!()
-            }
-          }
-        ])
-        |> Keyword.put(:tool_choice, %{
+        default_function = %{
           type: "function",
-          function: %{name: "Schema"}
-        })
+          function: %{
+            "description" => "Correctly extracted data with all required parameters",
+            "name" => "Schema",
+            "parameters" => json_schema |> Jason.decode!()
+          }
+        }
+
+        # Use custom functions if provided, otherwise use the default Schema function
+        tools =
+          if custom_functions == [] do
+            [default_function]
+          else
+            Enum.map(custom_functions, fn f -> %{type: "function", function: f} end)
+          end
+
+        # CHANGE: Always force the LLM to use the first function
+        tool_choice =
+          if custom_functions == [] do
+            %{type: "function", function: %{name: "Schema"}}
+          else
+            # Force the LLM to call our function
+            %{type: "function", function: %{name: hd(custom_functions)["name"]}}
+          end
+
+        params
+        |> Keyword.put(:tools, tools)
+        |> Keyword.put(:tool_choice, tool_choice)
     end
   end
 
