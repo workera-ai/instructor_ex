@@ -144,8 +144,9 @@ defmodule Instructor do
         {response_model, context} ->
           {response_model, context}
 
-        rm -> {rm, %{}}
-      end |> dbg()
+        rm ->
+          {rm, %{}}
+      end
 
     case {response_model, is_stream} do
       {{:partial, {:array, response_model}}, true} ->
@@ -246,18 +247,16 @@ defmodule Instructor do
 
   """
   def cast_all({data, types}, params) do
-    fields = Map.keys(types) |> dbg()
+    fields = Map.keys(types)
 
     {data, types}
     |> Ecto.Changeset.cast(params, fields)
     |> Ecto.Changeset.validate_required(fields)
-    |> dbg()
   end
 
   def cast_all(schema, params) do
-    dbg(different_cast: schema, params: params)
     response_model = schema.__struct__
-    fields = response_model.__schema__(:fields) |> MapSet.new() |> dbg()
+    fields = response_model.__schema__(:fields) |> MapSet.new()
     embedded_fields = response_model.__schema__(:embeds) |> MapSet.new()
     associated_fields = response_model.__schema__(:associations) |> MapSet.new()
 
@@ -269,7 +268,6 @@ defmodule Instructor do
     changeset =
       schema
       |> Ecto.Changeset.cast(params, fields |> MapSet.to_list())
-      |> dbg()
 
     changeset =
       for field <- embedded_fields, reduce: changeset do
@@ -288,7 +286,12 @@ defmodule Instructor do
     changeset
   end
 
-  defp do_streaming_partial_array_chat_completion(response_model, params, config, schema_context \\ %{}) do
+  defp do_streaming_partial_array_chat_completion(
+         response_model,
+         params,
+         config,
+         schema_context \\ %{}
+       ) do
     wrapped_model = %{
       value:
         Ecto.ParameterizedType.init(Ecto.Embedded, cardinality: :many, related: response_model)
@@ -450,7 +453,7 @@ defmodule Instructor do
         {%{}, response_model}
       end
 
-    with {:ok, raw_response, params} <- do_adapter_chat_completion(params, config) |> dbg(),
+    with {:ok, raw_response, params} <- do_adapter_chat_completion(params, config),
          {%Ecto.Changeset{valid?: true} = changeset, raw_response} <-
            {cast_all(model, params), raw_response},
          {%Ecto.Changeset{valid?: true} = changeset, _raw_response} <-
@@ -501,7 +504,7 @@ defmodule Instructor do
   defp do_adapter_chat_completion(params, config) do
     case adapter(config).chat_completion(params, config) do
       {:ok, response, content} ->
-        {:ok, response, content} |> dbg()
+        {:ok, response, content}
 
       {:error, reason} ->
         {:error, "LLM Adapter Error: #{inspect(reason)}"}

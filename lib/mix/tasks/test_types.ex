@@ -54,10 +54,9 @@ defmodule Mix.Tasks.Instructor.TestTypes do
       messages: [
         %{
           role: "user",
-          content:
-            "This is a structured output test, please reply with test data"
+          content: "This is a structured output test, please reply with test data"
         }
       ]
-    ) |> dbg()
+    )
   end
 end

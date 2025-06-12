@@ -47,7 +47,6 @@ defmodule Instructor.Types.Enum do
 
   # JSON Schema generation
   def to_json_schema(opts, context \\ %{}) do
-    dbg(to_json_schema: {opts, context})
     values = get_values(opts[:values], context)
 
     %{
@@ -62,6 +61,9 @@ defmodule Instructor.Types.Enum do
   defp get_values(_, _context), do: []
 
   defp maybe_add(map, _key, nil, _context), do: map
-  defp maybe_add(map, key, value, context) when is_function(value, 1), do: Map.put(map, key, value.(context))
+
+  defp maybe_add(map, key, value, context) when is_function(value, 1),
+    do: Map.put(map, key, value.(context))
+
   defp maybe_add(map, key, value, _context), do: Map.put(map, key, value)
 end
