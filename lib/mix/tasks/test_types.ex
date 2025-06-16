@@ -48,15 +48,18 @@ defmodule Mix.Tasks.Instructor.TestTypes do
     IO.puts(Jason.encode!(Jason.decode!(json_schema), pretty: true))
 
     Instructor.chat_completion(
-      model: "gpt-4o-mini",
-      response_model: {TestSchema, %{status: "active"}},
-      mode: :json,
-      messages: [
-        %{
-          role: "user",
-          content: "This is a structured output test, please reply with test data"
-        }
-      ]
+      [
+        model: "gpt-4o-mini",
+        response_model: {TestSchema, %{status: "active"}},
+        mode: :json,
+        messages: [
+          %{
+            role: "user",
+            content: "This is a structured output test, please reply with test data"
+          }
+        ]
+      ],
+      adapter: Instructor.Adapters.Azure
     )
   end
 end
