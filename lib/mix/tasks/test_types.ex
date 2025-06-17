@@ -59,7 +59,7 @@ defmodule Mix.Tasks.Instructor.TestTypes do
           }
         ]
       ],
-      adapter: Instructor.Adapters.Azure
+      adapter: Instructor.Adapters.OpenAI
     )
   end
 end

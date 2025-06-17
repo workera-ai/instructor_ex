@@ -202,7 +202,7 @@ defmodule Instructor.JSONSchema do
        when is_ecto_types(ecto_types) do
     properties =
       for {field, type} <- ecto_types, into: %{} do
-        {field, for_type(type)}
+        {field, for_type(type, schema_context)}
       end
 
     required = Map.keys(properties) |> Enum.sort()
@@ -406,6 +406,14 @@ defmodule Instructor.JSONSchema do
       mod.to_json_schema(opts, schema_context)
     else
       raise "Unsupported type: #{inspect(mod)}, please implement `to_json_schema/1` via `use Instructor.EctoType`"
+    end
+  end
+
+  defp for_type(mod, schema_context) do
+    if function_exported?(mod, :to_json_schema, 1) do
+      mod.to_json_schema(schema_context)
+    else
+      raise "Unsupported type: #{inspect(mod)}, please implement `to_json_schema/0` via `use Instructor.EctoType`"
     end
   end
 
