@@ -1,6 +1,6 @@
 defmodule Instructor.Adapters.Azure do
   @moduledoc """
-  Documentation for `Instructor.Adapters.OpenAI`.
+  Documentation for `Instructor.Adapters.Azure`.
   """
   @behaviour Instructor.Adapter
   @supported_modes [:tools, :json, :md_json, :json_schema]
