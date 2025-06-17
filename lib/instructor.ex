@@ -150,6 +150,9 @@ defmodule Instructor do
         {:array, response_model} ->
           {{:array, response_model}, %{}}
 
+        {response_model, context} when is_map(context) ->
+          {response_model, context}
+
         rm ->
           {rm, %{}}
       end
