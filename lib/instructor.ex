@@ -141,8 +141,14 @@ defmodule Instructor do
         {:array, {response_model, context}} ->
           {{:array, response_model}, context}
 
-        {response_model, context} ->
-          {response_model, context}
+        {:partial, {:array, response_model}} ->
+          {:partial, {:array, response_model}, %{}}
+
+        {:partial, response_model} ->
+          {{:partial, response_model}, %{}}
+
+        {:array, response_model} ->
+          {{:array, response_model}, %{}}
 
         rm ->
           {rm, %{}}
