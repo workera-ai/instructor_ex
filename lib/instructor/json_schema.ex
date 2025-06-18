@@ -265,7 +265,10 @@ defmodule Instructor.JSONSchema do
   defp for_type(:id, _), do: %{type: "integer", description: "Integer, e.g. 1"}
   defp for_type(:binary_id, _), do: %{type: "string"}
   defp for_type(:integer, _), do: %{type: "integer", description: "Integer, e.g. 1"}
-  defp for_type(:float, _), do: %{type: "number", description: "Float, e.g. 1.27", format: "float"}
+
+  defp for_type(:float, _),
+    do: %{type: "number", description: "Float, e.g. 1.27", format: "float"}
+
   defp for_type(:boolean, _), do: %{type: "boolean", description: "Boolean, e.g. true"}
   defp for_type(:string, _), do: %{type: "string", description: "String, e.g. 'hello'"}
   # defp for_type(:binary), do: %{type: "unsupported"}
@@ -335,7 +338,8 @@ defmodule Instructor.JSONSchema do
     }
 
   defp for_type(
-         {:parameterized, {Ecto.Embedded, %Ecto.Embedded{cardinality: :many, related: related}}}, _
+         {:parameterized, {Ecto.Embedded, %Ecto.Embedded{cardinality: :many, related: related}}},
+         _
        )
        when is_ecto_schema(related) do
     title = title_for(related)
@@ -348,7 +352,8 @@ defmodule Instructor.JSONSchema do
   end
 
   defp for_type(
-         {:parameterized, {Ecto.Embedded, %Ecto.Embedded{cardinality: :many, related: related}}}, _
+         {:parameterized, {Ecto.Embedded, %Ecto.Embedded{cardinality: :many, related: related}}},
+         _
        )
        when is_ecto_types(related) do
     properties =
@@ -369,14 +374,16 @@ defmodule Instructor.JSONSchema do
   end
 
   defp for_type(
-         {:parameterized, {Ecto.Embedded, %Ecto.Embedded{cardinality: :one, related: related}}}, _
+         {:parameterized, {Ecto.Embedded, %Ecto.Embedded{cardinality: :one, related: related}}},
+         _
        )
        when is_ecto_schema(related) do
     %{"$ref": "#/$defs/#{title_for(related)}"}
   end
 
   defp for_type(
-         {:parameterized, {Ecto.Embedded, %Ecto.Embedded{cardinality: :one, related: related}}}, _
+         {:parameterized, {Ecto.Embedded, %Ecto.Embedded{cardinality: :one, related: related}}},
+         _
        )
        when is_ecto_types(related) do
     properties =
@@ -402,14 +409,18 @@ defmodule Instructor.JSONSchema do
   end
 
   defp for_type({:parameterized, {mod, opts}}, schema_context) when is_atom(mod) do
+    Code.ensure_loaded(mod)
+
     if function_exported?(mod, :to_json_schema, 2) do
       mod.to_json_schema(opts, schema_context)
     else
-      raise "Unsupported type: #{inspect(mod)}, please implement `to_json_schema/1` via `use Instructor.EctoType`"
+      raise "Unsupported type: #{inspect(mod)}, please implement `to_json_schema/2` via `use Instructor.EctoType`"
     end
   end
 
   defp for_type(mod, schema_context) do
+    Code.ensure_loaded(mod)
+
     if function_exported?(mod, :to_json_schema, 1) do
       mod.to_json_schema(schema_context)
     else
@@ -418,6 +429,8 @@ defmodule Instructor.JSONSchema do
   end
 
   defp for_type(mod) do
+    Code.ensure_loaded(mod)
+
     if function_exported?(mod, :to_json_schema, 0) do
       mod.to_json_schema()
     else
@@ -463,7 +476,8 @@ defmodule Instructor.JSONSchema do
     |> maybe_call_with_path(fun, path, opts)
   end
 
-  defp do_traverse_and_update(tree, fun, path, opts), do: maybe_call_with_path(tree, fun, path, opts)
+  defp do_traverse_and_update(tree, fun, path, opts),
+    do: maybe_call_with_path(tree, fun, path, opts)
 
   defp maybe_call_with_path(value, fun, path, opts) do
     if Keyword.get(opts, :include_path, false) do

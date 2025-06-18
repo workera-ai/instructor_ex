@@ -28,6 +28,7 @@ defmodule Instructor.Types.String do
 
   # Cast with options
   def cast(value, opts) when is_binary(value), do: {:ok, value}
+
   def cast(value, opts) do
     :error
   end
@@ -42,7 +43,7 @@ defmodule Instructor.Types.String do
   def dump(value, _dumper, _opts), do: {:ok, value}
 
   # Load with options and loader function (3-arity version for ParameterizedType)
-   def load(value, _loader, _opts), do: {:ok, value}
+  def load(value, _loader, _opts), do: {:ok, value}
 
   # These are required by Ecto.ParameterizedType
   def embed_as(_opts, _format), do: :self
@@ -61,6 +62,9 @@ defmodule Instructor.Types.String do
   end
 
   defp maybe_add(map, _key, nil, _context), do: map
-  defp maybe_add(map, key, value, context) when is_function(value, 1), do: Map.put(map, key, value.(context))
+
+  defp maybe_add(map, key, value, context) when is_function(value, 1),
+    do: Map.put(map, key, value.(context))
+
   defp maybe_add(map, key, value, _context), do: Map.put(map, key, value)
 end
