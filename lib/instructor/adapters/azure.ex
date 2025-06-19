@@ -129,7 +129,9 @@ defmodule Instructor.Adapters.Azure do
       fn _ -> nil end
     )
     |> SSEStreamParser.parse()
-    |> Stream.map(fn chunk -> parse_stream_chunk_for_mode(mode, chunk) end)
+    |> Stream.map(fn chunk ->
+      parse_stream_chunk_for_mode(mode, chunk)
+    end)
   end
 
   defp do_chat_completion(mode, params, config) do
@@ -199,6 +201,8 @@ defmodule Instructor.Adapters.Azure do
       %{"content" => chunk} -> chunk
     end
   end
+
+  defp parse_stream_chunk_for_mode(_, %{"choices" => []}), do: ""
 
   defp parse_stream_chunk_for_mode(_, %{"choices" => [%{"finish_reason" => "stop"}]}), do: ""
 
