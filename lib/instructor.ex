@@ -130,24 +130,51 @@ defmodule Instructor do
     is_stream = Keyword.get(params, :stream, false)
     response_model = Keyword.fetch!(params, :response_model)
 
+    {response_model, schema_context} =
+      case response_model do
+        {:partial, {:array, {response_model, context}}} ->
+          {{:partial, {:array, response_model}}, context}
+
+        {:partial, {response_model, context}} ->
+          {{:partial, response_model}, context}
+
+        {:array, {response_model, context}} ->
+          {{:array, response_model}, context}
+
+        {:partial, {:array, response_model}} ->
+          {:partial, {:array, response_model}, %{}}
+
+        {:partial, response_model} ->
+          {{:partial, response_model}, %{}}
+
+        {:array, response_model} ->
+          {{:array, response_model}, %{}}
+
+        {response_model, context} when is_map(context) ->
+          {response_model, context}
+
+        rm ->
+          {rm, %{}}
+      end
+
     case {response_model, is_stream} do
       {{:partial, {:array, response_model}}, true} ->
-        do_streaming_partial_array_chat_completion(response_model, params, config)
+        do_streaming_partial_array_chat_completion(response_model, params, config, schema_context)
 
       {{:partial, response_model}, true} ->
-        do_streaming_partial_chat_completion(response_model, params, config)
+        do_streaming_partial_chat_completion(response_model, params, config, schema_context)
 
       {{:array, response_model}, true} ->
-        do_streaming_array_chat_completion(response_model, params, config)
+        do_streaming_array_chat_completion(response_model, params, config, schema_context)
 
       {{:array, response_model}, false} ->
         params = Keyword.put(params, :stream, true)
 
-        do_streaming_array_chat_completion(response_model, params, config)
+        do_streaming_array_chat_completion(response_model, params, config, schema_context)
         |> Enum.to_list()
 
       {response_model, false} ->
-        do_chat_completion(response_model, params, config)
+        do_chat_completion(response_model, params, config, schema_context)
 
       {_, true} ->
         raise """
@@ -268,7 +295,12 @@ defmodule Instructor do
     changeset
   end
 
-  defp do_streaming_partial_array_chat_completion(response_model, params, config) do
+  defp do_streaming_partial_array_chat_completion(
+         response_model,
+         params,
+         config,
+         schema_context \\ %{}
+       ) do
     wrapped_model = %{
       value:
         Ecto.ParameterizedType.init(Ecto.Embedded, cardinality: :many, related: response_model)
@@ -277,7 +309,7 @@ defmodule Instructor do
     params = Keyword.put(params, :response_model, wrapped_model)
     validation_context = Keyword.get(params, :validation_context, %{})
     mode = Keyword.get(params, :mode, :tools)
-    params = params_for_mode(mode, wrapped_model, params)
+    params = params_for_mode(mode, wrapped_model, params, schema_context)
 
     model =
       if is_ecto_schema(response_model) do
@@ -337,7 +369,7 @@ defmodule Instructor do
     )
   end
 
-  defp do_streaming_partial_chat_completion(response_model, params, config) do
+  defp do_streaming_partial_chat_completion(response_model, params, config, schema_context \\ %{}) do
     wrapped_model = %{
       value:
         Ecto.ParameterizedType.init(Ecto.Embedded, cardinality: :one, related: response_model)
@@ -346,7 +378,7 @@ defmodule Instructor do
     params = Keyword.put(params, :response_model, wrapped_model)
     validation_context = Keyword.get(params, :validation_context, %{})
     mode = Keyword.get(params, :mode, :tools)
-    params = params_for_mode(mode, wrapped_model, params)
+    params = params_for_mode(mode, wrapped_model, params, schema_context)
 
     adapter(config).chat_completion(params, config)
     |> Instructor.JSONStreamParser.parse()
@@ -383,7 +415,7 @@ defmodule Instructor do
     )
   end
 
-  defp do_streaming_array_chat_completion(response_model, params, config) do
+  defp do_streaming_array_chat_completion(response_model, params, config, schema_context \\ %{}) do
     wrapped_model = %{
       value:
         Ecto.ParameterizedType.init(Ecto.Embedded, cardinality: :many, related: response_model)
@@ -392,7 +424,7 @@ defmodule Instructor do
     params = Keyword.put(params, :response_model, wrapped_model)
     validation_context = Keyword.get(params, :validation_context, %{})
     mode = Keyword.get(params, :mode, :tools)
-    params = params_for_mode(mode, wrapped_model, params)
+    params = params_for_mode(mode, wrapped_model, params, schema_context)
 
     adapter(config).chat_completion(params, config)
     |> Jaxon.Stream.from_enumerable()
@@ -417,11 +449,11 @@ defmodule Instructor do
     end)
   end
 
-  defp do_chat_completion(response_model, params, config) do
+  defp do_chat_completion(response_model, params, config, schema_context \\ %{}) do
     validation_context = Keyword.get(params, :validation_context, %{})
     max_retries = Keyword.get(params, :max_retries)
     mode = Keyword.get(params, :mode, :json_schema)
-    params = params_for_mode(mode, response_model, params)
+    params = params_for_mode(mode, response_model, params, schema_context)
 
     model =
       if is_ecto_schema(response_model) do
@@ -438,6 +470,8 @@ defmodule Instructor do
       {:ok, changeset |> Ecto.Changeset.apply_changes()}
     else
       {%Ecto.Changeset{} = changeset, raw_response} ->
+        IO.puts("in else")
+
         if max_retries > 0 do
           errors = Instructor.ErrorFormatter.format_errors(changeset)
 
