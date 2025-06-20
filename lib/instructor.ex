@@ -531,8 +531,8 @@ defmodule Instructor do
     end
   end
 
-  defp params_for_mode(mode, response_model, params) do
-    json_schema = JSONSchema.from_ecto_schema(response_model)
+  defp params_for_mode(mode, response_model, params, schema_context \\ %{}) do
+    json_schema = JSONSchema.from_ecto_schema(response_model, schema_context)
 
     case mode do
       :md_json ->
