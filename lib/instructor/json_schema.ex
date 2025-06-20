@@ -429,13 +429,15 @@ defmodule Instructor.JSONSchema do
   end
 
   defp for_type(mod) do
-    Code.ensure_loaded(mod)
-
-    if function_exported?(mod, :to_json_schema, 0) do
-      mod.to_json_schema()
-    else
-      raise "Unsupported type: #{inspect(mod)}, please implement `to_json_schema/0` via `use Instructor.EctoType`"
-    end
+    for_type(mod, %{})
+    # dbg(mod)
+    # Code.ensure_loaded(mod)
+    #
+    # if function_exported?(mod, :to_json_schema, 0) do
+    #   mod.to_json_schema()
+    # else
+    #   raise "Unsupported type: #{inspect(mod)}, please implement `to_json_schema/0` via `use Instructor.EctoType`"
+    # end
   end
 
   @doc """
