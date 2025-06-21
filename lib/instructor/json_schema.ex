@@ -136,7 +136,6 @@ defmodule Instructor.JSONSchema do
       |> Enum.map(fn field ->
         type = ecto_schema.__schema__(:type, field)
         value = for_type(type, schema_context)
-        value = Map.merge(%{title: Atom.to_string(field)}, value)
 
         {field, value}
       end)
