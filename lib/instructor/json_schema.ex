@@ -136,7 +136,6 @@ defmodule Instructor.JSONSchema do
       |> Enum.map(fn field ->
         type = ecto_schema.__schema__(:type, field)
         value = for_type(type, schema_context)
-        value = Map.merge(%{title: Atom.to_string(field)}, value)
 
         {field, value}
       end)
@@ -429,13 +428,7 @@ defmodule Instructor.JSONSchema do
   end
 
   defp for_type(mod) do
-    Code.ensure_loaded(mod)
-
-    if function_exported?(mod, :to_json_schema, 0) do
-      mod.to_json_schema()
-    else
-      raise "Unsupported type: #{inspect(mod)}, please implement `to_json_schema/0` via `use Instructor.EctoType`"
-    end
+    for_type(mod, %{})
   end
 
   @doc """
