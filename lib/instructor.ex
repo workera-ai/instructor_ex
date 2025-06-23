@@ -452,7 +452,7 @@ defmodule Instructor do
   defp do_chat_completion(response_model, params, config, schema_context \\ %{}) do
     validation_context = Keyword.get(params, :validation_context, %{})
     max_retries = Keyword.get(params, :max_retries)
-    mode = Keyword.get(params, :mode, :tools)
+    mode = Keyword.get(params, :mode, :json_schema)
     params = params_for_mode(mode, response_model, params, schema_context)
 
     model =
@@ -533,51 +533,6 @@ defmodule Instructor do
 
   defp params_for_mode(mode, response_model, params, schema_context \\ %{}) do
     json_schema = JSONSchema.from_ecto_schema(response_model, schema_context)
-
-    params =
-      params
-      |> Keyword.update(:messages, [], fn messages ->
-        decoded_json_schema = Jason.decode!(json_schema)
-
-        additional_definitions =
-          if defs = decoded_json_schema["$defs"] do
-            "\nHere are some more definitions to adhere too:\n" <> Jason.encode!(defs)
-          else
-            ""
-          end
-
-        sys_message = %{
-          role: "system",
-          content: """
-          As a genius expert, your task is to understand the content and provide the parsed objects in json that match the following json_schema:\n
-          #{json_schema}
-
-          #{additional_definitions}
-
-          Make sure to return an instance of the JSON, not the schema itself.
-          """
-        }
-
-        case mode do
-          :md_json ->
-            [sys_message | messages] ++
-              [
-                %{
-                  role: "assistant",
-                  content: "Here is the perfectly correctly formatted JSON\n```json"
-                }
-              ]
-
-          :json ->
-            [sys_message | messages]
-
-          :json_schema ->
-            [sys_message | messages]
-
-          :tools ->
-            [sys_message | messages]
-        end
-      end)
 
     case mode do
       :md_json ->
