@@ -224,13 +224,17 @@ defmodule Instructor.Adapters.OpenAI do
   defp config(nil), do: config(Application.get_env(:instructor, :openai, []))
 
   defp config(base_config) do
-    default_config = [
-      api_url: "https://api.openai.com",
-      api_path: "/v1/chat/completions",
-      api_key: System.get_env("OPENAI_API_KEY"),
-      auth_mode: :bearer,
-      http_options: [receive_timeout: 60_000]
-    ]
+    default_config =
+      Keyword.merge(
+        [
+          api_url: "https://api.openai.com",
+          api_path: "/v1/chat/completions",
+          api_key: System.get_env("OPENAI_API_KEY"),
+          auth_mode: :bearer,
+          http_options: [receive_timeout: 60_000]
+        ],
+        Application.get_env(:instructor, :openai, [])
+      )
 
     Keyword.merge(default_config, base_config)
   end
