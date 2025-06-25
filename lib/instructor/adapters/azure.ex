@@ -232,13 +232,18 @@ defmodule Instructor.Adapters.Azure do
   defp config(base_config, params) do
     model = Keyword.get(params, :model, @default_model)
 
-    default_config = [
-      api_url: System.fetch_env!("AZURE_API_URL"),
-      api_path: "/openai/deployments/#{model}/chat/completions?api-version=2025-01-01-preview",
-      api_key: System.fetch_env!("AZURE_API_KEY"),
-      auth_mode: :api_key_header,
-      http_options: [receive_timeout: 60_000]
-    ]
+    default_config =
+      Keyword.merge(
+        [
+          api_url: System.fetch_env!("AZURE_API_URL"),
+          api_path:
+            "/openai/deployments/#{model}/chat/completions?api-version=2025-01-01-preview",
+          api_key: System.fetch_env!("AZURE_API_KEY"),
+          auth_mode: :api_key_header,
+          http_options: [receive_timeout: 60_000]
+        ],
+        Application.get_env(:instructor, :azure, [])
+      )
 
     Keyword.merge(default_config, base_config)
   end
