@@ -33,6 +33,8 @@ defmodule Mix.Tasks.Instructor.TestTypes do
         field :status, Instructor.Types.Enum,
           values: ["active", "pending", "completed"],
           description: &__MODULE__.get_description/1
+
+        field :is_active, Instructor.Types.Boolean, description: "Whether the item is active"
       end
 
       def get_description(context) do
