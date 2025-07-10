@@ -122,7 +122,7 @@ defmodule Instructor.Adapters.Azure do
           {^ref, data} ->
             {[data], task}
         after
-          15_000 ->
+          45_000 ->
             raise "Timeout waiting for LLM call to receive streaming data"
         end
       end,
@@ -244,6 +244,7 @@ defmodule Instructor.Adapters.Azure do
         ],
         Application.get_env(:instructor, :azure, [])
       )
+      |> dbg()
 
     Keyword.merge(default_config, base_config)
   end
