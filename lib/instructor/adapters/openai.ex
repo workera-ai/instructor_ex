@@ -120,7 +120,7 @@ defmodule Instructor.Adapters.OpenAI do
           {^ref, data} ->
             {[data], task}
         after
-          15_000 ->
+          45_000 ->
             raise "Timeout waiting for LLM call to receive streaming data"
         end
       end,
