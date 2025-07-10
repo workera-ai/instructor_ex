@@ -244,7 +244,6 @@ defmodule Instructor.Adapters.Azure do
         ],
         Application.get_env(:instructor, :azure, [])
       )
-      |> dbg()
 
     Keyword.merge(default_config, base_config)
   end
