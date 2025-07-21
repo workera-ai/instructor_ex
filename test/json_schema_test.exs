@@ -19,14 +19,13 @@ defmodule JSONSchemaTest do
 
     json_schema =
       JSONSchema.from_ecto_schema(JSONSchemaTest.Demo)
-      |> Jason.decode!()
+      |> JSON.decode!()
 
     expected_json_schema =
       %{
         "description" => "",
         "properties" => %{
           "string" => %{
-            "title" => "string",
             "type" => "string",
             "description" => "String, e.g. 'hello'"
           }
@@ -52,13 +51,12 @@ defmodule JSONSchemaTest do
 
     json_schema =
       JSONSchema.from_ecto_schema(Demo)
-      |> Jason.decode!()
+      |> JSON.decode!()
 
     expected_json_schema = %{
       "description" => "",
       "properties" => %{
         "string" => %{
-          "title" => "string",
           "type" => "string",
           "description" => "String, e.g. 'hello'"
         }
@@ -75,14 +73,13 @@ defmodule JSONSchemaTest do
   test "includes documentation" do
     json_schema =
       JSONSchema.from_ecto_schema(InstructorTest.DemoWithUseInstructorAndNewDoc)
-      |> Jason.decode!()
+      |> JSON.decode!()
 
     expected_json_schema =
       %{
         "description" => "Hello world",
         "properties" => %{
           "string" => %{
-            "title" => "string",
             "type" => "string",
             "description" => "String, e.g. 'hello'"
           }
@@ -132,7 +129,7 @@ defmodule JSONSchemaTest do
 
     json_schema =
       JSONSchema.from_ecto_schema(Demo)
-      |> Jason.decode!()
+      |> JSON.decode!()
 
     assert json_schema["description"] == "Hello world"
   end
@@ -166,49 +163,42 @@ defmodule JSONSchemaTest do
 
     json_schema =
       JSONSchema.from_ecto_schema(Demo)
-      |> Jason.decode!()
+      |> JSON.decode!()
 
     expected_json_schema = %{
       "description" => "",
       "properties" => %{
         "array" => %{
           "items" => %{
-            "type" => "string",
-            "description" => "String, e.g. 'hello'"
+            "description" => "String, e.g. 'hello'",
+            "type" => "string"
           },
-          "title" => "array",
           "type" => "array"
         },
         "boolean" => %{
-          "title" => "boolean",
           "type" => "boolean",
           "description" => "Boolean, e.g. true"
         },
         "date" => %{
           "format" => "date",
-          "title" => "date",
           "type" => "string",
           "description" => "ISO8601 Date, e.g. \"2024-07-20\""
         },
         "decimal" => %{
           "format" => "float",
-          "title" => "decimal",
           "type" => "number"
         },
         "float" => %{
           "format" => "float",
-          "title" => "float",
           "type" => "number",
           "description" => "Float, e.g. 1.27"
         },
         "integer" => %{
-          "title" => "integer",
           "type" => "integer",
           "description" => "Integer, e.g. 1"
         },
         "map" => %{
           "additionalProperties" => false,
-          "title" => "map",
           "type" => "object",
           "description" => "An object with arbitrary keys and values, e.g. { key: value }",
           "properties" => %{}
@@ -218,50 +208,42 @@ defmodule JSONSchemaTest do
             "type" => "string",
             "description" => "String, e.g. 'hello'"
           },
-          "title" => "map_two",
           "type" => "object",
           "description" => "An object with values of a type :string, e.g. { key: value }",
           "properties" => %{}
         },
         "naive_datetime" => %{
           "format" => "date-time",
-          "title" => "naive_datetime",
           "type" => "string",
           "description" => "ISO8601 DateTime, e.g. \"2024-07-20T12:00:00\""
         },
         "naive_datetime_usec" => %{
           "format" => "date-time",
-          "title" => "naive_datetime_usec",
-          "type" => "string",
           "description" =>
-            "ISO8601 DateTime with microseconds, e.g. \"2024-07-20T12:00:00.000000\""
+            "ISO8601 DateTime with microseconds, e.g. \"2024-07-20T12:00:00.000000\"",
+          "type" => "string"
         },
         "string" => %{
           "description" => "String, e.g. 'hello'",
-          "title" => "string",
           "type" => "string"
         },
         "time" => %{
           "pattern" => "^[0-9]{2}:?[0-9]{2}:?[0-9]{2}$",
-          "title" => "time",
           "type" => "string",
           "description" => "ISO8601 Time, e.g. \"12:00:00\""
         },
         "time_usec" => %{
           "pattern" => "^[0-9]{2}:?[0-9]{2}:?[0-9]{2}.[0-9]{6}$",
-          "title" => "time_usec",
           "type" => "string",
           "description" => "ISO8601 Time with microseconds, e.g. \"12:00:00.000000\""
         },
         "utc_datetime" => %{
           "format" => "date-time",
-          "title" => "utc_datetime",
           "type" => "string",
           "description" => "ISO8601 DateTime, e.g. \"2024-07-20T12:00:00Z\""
         },
         "utc_datetime_usec" => %{
           "format" => "date-time",
-          "title" => "utc_datetime_usec",
           "type" => "string",
           "description" =>
             "ISO8601 DateTime with microseconds, e.g. \"2024-07-20T12:00:00.000000Z\""
@@ -313,7 +295,7 @@ defmodule JSONSchemaTest do
 
     json_schema =
       JSONSchema.from_ecto_schema(Demo)
-      |> Jason.decode!()
+      |> JSON.decode!()
 
     expected_json_schema = %{
       "$defs" => %{
@@ -321,7 +303,6 @@ defmodule JSONSchemaTest do
           "description" => "",
           "properties" => %{
             "string" => %{
-              "title" => "string",
               "type" => "string",
               "description" => "String, e.g. 'hello'"
             }
@@ -335,8 +316,7 @@ defmodule JSONSchemaTest do
       "description" => "",
       "properties" => %{
         "embedded" => %{
-          "$ref" => "#/$defs/JSONSchemaTest.Embedded",
-          "title" => "embedded"
+          "$ref" => "#/$defs/JSONSchemaTest.Embedded"
         }
       },
       "required" => ["embedded"],
@@ -369,7 +349,7 @@ defmodule JSONSchemaTest do
 
     json_schema =
       JSONSchema.from_ecto_schema(Demo)
-      |> Jason.decode!()
+      |> JSON.decode!()
 
     expected_json_schema =
       %{
@@ -378,12 +358,10 @@ defmodule JSONSchemaTest do
             "description" => "",
             "properties" => %{
               "id" => %{
-                "title" => "id",
                 "type" => "integer",
                 "description" => "Integer, e.g. 1"
               },
               "string" => %{
-                "title" => "string",
                 "type" => "string",
                 "description" => "String, e.g. 'hello'"
               }
@@ -398,7 +376,6 @@ defmodule JSONSchemaTest do
         "properties" => %{
           "child" => %{"$ref" => "#/$defs/JSONSchemaTest.Child"},
           "id" => %{
-            "title" => "id",
             "type" => "integer",
             "description" => "Integer, e.g. 1"
           }
@@ -433,7 +410,7 @@ defmodule JSONSchemaTest do
 
     json_schema =
       JSONSchema.from_ecto_schema(Demo)
-      |> Jason.decode!()
+      |> JSON.decode!()
 
     expected_json_schema = %{
       "$defs" => %{
@@ -441,12 +418,10 @@ defmodule JSONSchemaTest do
           "description" => "",
           "properties" => %{
             "id" => %{
-              "title" => "id",
               "type" => "integer",
               "description" => "Integer, e.g. 1"
             },
             "string" => %{
-              "title" => "string",
               "type" => "string",
               "description" => "String, e.g. 'hello'"
             }
@@ -465,7 +440,6 @@ defmodule JSONSchemaTest do
           "type" => "array"
         },
         "id" => %{
-          "title" => "id",
           "type" => "integer",
           "description" => "Integer, e.g. 1"
         }
@@ -497,7 +471,7 @@ defmodule JSONSchemaTest do
 
     json_schema =
       JSONSchema.from_ecto_schema(schema)
-      |> Jason.decode!()
+      |> JSON.decode!()
 
     expected_json_schema = %{
       "properties" => %{

@@ -80,7 +80,7 @@ defmodule Instructor.Extras.ChainOfThought do
                   [
                     %{
                       role: "assistant",
-                      content: step |> Map.from_struct() |> Jason.encode!()
+                      content: step |> Map.from_struct() |> JSON.encode!()
                     }
                   ]
 

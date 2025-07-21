@@ -53,7 +53,7 @@ defmodule Instructor.SSEStreamParser do
   end
 
   defp decode_json!(data) do
-    case Jason.decode(data) do
+    case JSON.decode(data) do
       {:ok, decoded} -> decoded
       {:error, err} -> raise "Error decoding: #{inspect(err)} \n\n #{inspect(data)}"
     end

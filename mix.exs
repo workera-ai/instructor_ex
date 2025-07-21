@@ -118,7 +118,6 @@ defmodule Instructor.MixProject do
   defp deps do
     [
       {:ecto, "~> 3.12"},
-      {:jason, "~> 1.4.0"},
       {:req, "~> 0.5 or ~> 1.0"},
       {:jaxon, "~> 2.0"},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},

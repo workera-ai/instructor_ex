@@ -23,7 +23,7 @@ defmodule Instructor.TestHelpers do
                "tool_calls" => [
                  %{
                    "function" => %{
-                     "arguments" => Jason.encode!(result),
+                     "arguments" => JSON.encode!(result),
                      "name" => "schema"
                    },
                    "id" => "call_DT9fBvVCHWGSf9IeFZnlarIY",
@@ -59,7 +59,7 @@ defmodule Instructor.TestHelpers do
               "index" => 0,
               "logprobs" => nil,
               "message" => %{
-                "content" => Jason.encode!(result),
+                "content" => JSON.encode!(result),
                 "role" => "assistant"
               }
             }
@@ -76,7 +76,7 @@ defmodule Instructor.TestHelpers do
 
   def mock_openai_response_stream(:tools, result) do
     chunks =
-      Jason.encode!(%{value: result})
+      JSON.encode!(%{value: result})
       |> String.graphemes()
       |> Enum.chunk_every(12)
       |> Enum.map(fn chunk ->
@@ -91,7 +91,7 @@ defmodule Instructor.TestHelpers do
 
   def mock_openai_response_stream(mode, result) when mode in [:json, :md_json] do
     chunks =
-      Jason.encode!(%{value: result})
+      JSON.encode!(%{value: result})
       |> String.graphemes()
       |> Enum.chunk_every(12)
       |> Enum.map(fn chunk ->

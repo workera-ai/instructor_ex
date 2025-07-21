@@ -75,7 +75,7 @@ defmodule Instructor.Adapters.OpenAI do
          ]
        }) do
     [
-      Map.put(message, "content", function |> Jason.encode!())
+      Map.put(message, "content", function |> JSON.encode!())
       |> Map.new(fn {k, v} -> {String.to_atom(k), v} end),
       %{
         role: "tool",
@@ -151,18 +151,18 @@ defmodule Instructor.Adapters.OpenAI do
            %{"message" => %{"tool_calls" => [%{"function" => %{"arguments" => args}}]}}
          ]
        }),
-       do: Jason.decode(args)
+       do: JSON.decode(args)
 
   defp parse_response_for_mode(:md_json, %{"choices" => [%{"message" => %{"content" => content}}]}),
-       do: Jason.decode(content)
+       do: JSON.decode(content)
 
   defp parse_response_for_mode(:json, %{"choices" => [%{"message" => %{"content" => content}}]}),
-    do: Jason.decode(content)
+    do: JSON.decode(content)
 
   defp parse_response_for_mode(:json_schema, %{
          "choices" => [%{"message" => %{"content" => content}}]
        }),
-       do: Jason.decode(content)
+       do: JSON.decode(content)
 
   defp parse_response_for_mode(mode, response) do
     {:error, "Unsupported OpenAI mode #{mode} with response #{inspect(response)}"}

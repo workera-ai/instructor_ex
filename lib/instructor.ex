@@ -549,7 +549,7 @@ defmodule Instructor do
         |> Keyword.put(:response_format, %{
           type: "json_schema",
           json_schema: %{
-            schema: Jason.decode!(json_schema),
+            schema: JSON.decode!(json_schema),
             name: "schema",
             strict: true
           }
@@ -564,7 +564,7 @@ defmodule Instructor do
               "description" =>
                 "Correctly extracted `Schema` with all the required parameters with correct types",
               "name" => "Schema",
-              "parameters" => json_schema |> Jason.decode!()
+              "parameters" => json_schema |> JSON.decode!()
             }
           }
         ])

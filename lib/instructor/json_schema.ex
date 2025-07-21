@@ -47,7 +47,7 @@ defmodule Instructor.JSONSchema do
         &1
       end
     )
-    |> Jason.encode!()
+    |> JSON.encode!()
   end
 
   defp do_deprecation_warning(response_model) do

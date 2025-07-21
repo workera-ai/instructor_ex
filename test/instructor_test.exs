@@ -518,7 +518,7 @@ defmodule InstructorTest do
 
       TestHelpers.mock_openai_response_stream(mode, [
         %{name: "Thomas"},
-        %{name: "Jason"}
+        %{name: "JSON"}
       ])
 
       result =
@@ -528,11 +528,11 @@ defmodule InstructorTest do
           stream: true,
           response_model: {:array, %{name: :string}},
           messages: [
-            %{role: "user", content: "Repeat after me: Thomas, Jason"}
+            %{role: "user", content: "Repeat after me: Thomas, JSON"}
           ]
         )
 
-      assert [ok: %{name: "Thomas"}, ok: %{name: "Jason"}] =
+      assert [ok: %{name: "Thomas"}, ok: %{name: "JSON"}] =
                result |> Enum.to_list()
     end
   end

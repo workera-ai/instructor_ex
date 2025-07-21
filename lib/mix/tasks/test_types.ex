@@ -47,7 +47,7 @@ defmodule Mix.Tasks.Instructor.TestTypes do
 
     # Pretty print the schema
     IO.puts("Generated JSON Schema:")
-    IO.puts(Jason.encode!(Jason.decode!(json_schema), pretty: true))
+    IO.puts(JSON.encode!(JSON.decode!(json_schema), pretty: true))
 
     Instructor.chat_completion(
       [
