@@ -5,7 +5,7 @@ defmodule JSONStreamParserTest do
 
   def chunkify(obj) do
     obj
-    |> Jason.encode!()
+    |> JSON.encode!()
     |> String.graphemes()
     |> Enum.chunk_every(10)
     |> Enum.map(&Enum.join/1)

@@ -223,7 +223,7 @@ defmodule Instructor.Adapters.Gemini do
            %{"content" => %{"parts" => [%{"text" => text}]}}
          ]
        }) do
-    Jason.decode(text)
+    JSON.decode(text)
   end
 
   defp parse_stream_chunk_for_mode(
