@@ -122,7 +122,7 @@ defmodule Instructor.Adapters.Azure do
           {^ref, data} ->
             {[data], task}
         after
-          45_000 ->
+          120_000 ->
             raise "Timeout waiting for LLM call to receive streaming data"
         end
       end,
