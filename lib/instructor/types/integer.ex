@@ -29,12 +29,14 @@ defmodule Instructor.Types.Integer do
 
   # Cast with options
   def cast(value, opts) when is_integer(value), do: {:ok, value}
+
   def cast(value, opts) when is_binary(value) do
     case Integer.parse(value) do
       {int, ""} -> {:ok, int}
       _ -> :error
     end
   end
+
   def cast(_opts, _), do: :error
 
   # Load/dump with options
@@ -62,6 +64,9 @@ defmodule Instructor.Types.Integer do
   end
 
   defp maybe_add(map, _key, nil, _context), do: map
-  defp maybe_add(map, key, value, context) when is_function(value, 1), do: Map.put(map, key, value.(context))
+
+  defp maybe_add(map, key, value, context) when is_function(value, 1),
+    do: Map.put(map, key, value.(context))
+
   defp maybe_add(map, key, value, _context), do: Map.put(map, key, value)
 end

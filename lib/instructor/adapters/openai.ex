@@ -7,6 +7,7 @@ defmodule Instructor.Adapters.OpenAI do
 
   alias Instructor.JSONSchema
   alias Instructor.SSEStreamParser
+  alias Instructor.Utils
 
   @impl true
   def chat_completion(params, user_config \\ nil) do
@@ -92,7 +93,9 @@ defmodule Instructor.Adapters.OpenAI do
 
   defp do_streaming_chat_completion(mode, params, config) do
     pid = self()
+    dbg(config_options: config)
     options = http_options(config)
+    dbg(http: options)
     ref = make_ref()
 
     Stream.resource(
@@ -108,6 +111,7 @@ defmodule Instructor.Adapters.OpenAI do
               end
             ])
 
+          dbg(options: options)
           Req.post(url(config), options)
           send(pid, {ref, :done})
         end)
@@ -127,7 +131,10 @@ defmodule Instructor.Adapters.OpenAI do
       fn _ -> nil end
     )
     |> SSEStreamParser.parse()
-    |> Stream.map(fn chunk -> parse_stream_chunk_for_mode(mode, chunk) end)
+    |> Utils.guard_repetitive_chunks()
+    |> Stream.map(fn chunk ->
+      parse_stream_chunk_for_mode(mode, chunk)
+    end)
   end
 
   defp do_chat_completion(mode, params, config) do
@@ -219,7 +226,9 @@ defmodule Instructor.Adapters.OpenAI do
     end
   end
 
-  defp http_options(config), do: Keyword.fetch!(config, :http_options)
+  defp http_options(_config) do
+    [receive_timeout: 120_000, retry: :transient, max_retries: 1]
+  end
 
   defp config(nil), do: config(Application.get_env(:instructor, :openai, []))
 
@@ -230,8 +239,7 @@ defmodule Instructor.Adapters.OpenAI do
           api_url: "https://api.openai.com",
           api_path: "/v1/chat/completions",
           api_key: System.get_env("OPENAI_API_KEY"),
-          auth_mode: :bearer,
-          http_options: [receive_timeout: 60_000]
+          auth_mode: :bearer
         ],
         Application.get_env(:instructor, :openai, [])
       )

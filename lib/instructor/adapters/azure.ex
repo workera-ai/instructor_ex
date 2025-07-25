@@ -9,6 +9,7 @@ defmodule Instructor.Adapters.Azure do
 
   alias Instructor.JSONSchema
   alias Instructor.SSEStreamParser
+  alias Instructor.Utils
 
   @impl true
   def chat_completion(params, user_config \\ nil) do
@@ -129,6 +130,7 @@ defmodule Instructor.Adapters.Azure do
       fn _ -> nil end
     )
     |> SSEStreamParser.parse()
+    |> Utils.guard_repetitive_chunks()
     |> Stream.map(fn chunk ->
       parse_stream_chunk_for_mode(mode, chunk)
     end)
@@ -225,7 +227,9 @@ defmodule Instructor.Adapters.Azure do
     end
   end
 
-  defp http_options(config), do: Keyword.fetch!(config, :http_options)
+  defp http_options(_config) do
+    [receive_timeout: 120_000, retry: :transient, max_retries: 1]
+  end
 
   defp config(nil, params), do: config(Application.get_env(:instructor, :azure, []), params)
 
@@ -239,8 +243,7 @@ defmodule Instructor.Adapters.Azure do
           api_path:
             "/openai/deployments/#{model}/chat/completions?api-version=2025-01-01-preview",
           api_key: System.fetch_env!("AZURE_API_KEY"),
-          auth_mode: :api_key_header,
-          http_options: [receive_timeout: 60_000]
+          auth_mode: :api_key_header
         ],
         Application.get_env(:instructor, :azure, [])
       )
