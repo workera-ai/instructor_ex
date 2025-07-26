@@ -252,13 +252,7 @@ defmodule Instructor.Adapters.OpenAI do
   end
 
   defp http_options(_config, timeout) do
-    base_options = [receive_timeout: timeout, retry: :transient, max_retries: 1]
-
-    if Mix.env() == :test do
-      Keyword.put(base_options, :plug, {Req.Test, __MODULE__})
-    else
-      base_options
-    end
+    [receive_timeout: timeout, retry: :transient, max_retries: 1]
   end
 
   defp config(nil), do: config(Application.get_env(:instructor, :openai, []))
