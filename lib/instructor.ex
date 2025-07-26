@@ -135,14 +135,14 @@ defmodule Instructor do
         {:partial, {:array, {response_model, context}}} ->
           {{:partial, {:array, response_model}}, context}
 
+        {:partial, {:array, response_model}} ->
+          {:partial, {:array, response_model}, %{}}
+
         {:partial, {response_model, context}} ->
           {{:partial, response_model}, context}
 
         {:array, {response_model, context}} ->
           {{:array, response_model}, context}
-
-        {:partial, {:array, response_model}} ->
-          {:partial, {:array, response_model}, %{}}
 
         {:partial, response_model} ->
           {{:partial, response_model}, %{}}
@@ -299,7 +299,7 @@ defmodule Instructor do
          response_model,
          params,
          config,
-         schema_context \\ %{}
+         schema_context
        ) do
     wrapped_model = %{
       value:
@@ -369,7 +369,7 @@ defmodule Instructor do
     )
   end
 
-  defp do_streaming_partial_chat_completion(response_model, params, config, schema_context \\ %{}) do
+  defp do_streaming_partial_chat_completion(response_model, params, config, schema_context) do
     wrapped_model = %{
       value:
         Ecto.ParameterizedType.init(Ecto.Embedded, cardinality: :one, related: response_model)
@@ -415,7 +415,7 @@ defmodule Instructor do
     )
   end
 
-  defp do_streaming_array_chat_completion(response_model, params, config, schema_context \\ %{}) do
+  defp do_streaming_array_chat_completion(response_model, params, config, schema_context) do
     wrapped_model = %{
       value:
         Ecto.ParameterizedType.init(Ecto.Embedded, cardinality: :many, related: response_model)
@@ -531,7 +531,7 @@ defmodule Instructor do
     end
   end
 
-  defp params_for_mode(mode, response_model, params, schema_context \\ %{}) do
+  defp params_for_mode(mode, response_model, params, schema_context) do
     json_schema = JSONSchema.from_ecto_schema(response_model, schema_context)
 
     case mode do

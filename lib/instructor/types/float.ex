@@ -28,9 +28,9 @@ defmodule Instructor.Types.Float do
   def type(_opts), do: :float
 
   # Cast with options
-  def cast(value, opts) when is_float(value), do: {:ok, value}
+  def cast(value, _opts) when is_float(value), do: {:ok, value}
 
-  def cast(value, opts) when is_binary(value) do
+  def cast(value, _opts) when is_binary(value) do
     case Float.parse(value) do
       {float, ""} -> {:ok, float}
       _ -> :error
@@ -41,14 +41,14 @@ defmodule Instructor.Types.Float do
 
   # Load/dump with options
   def load(_opts, value), do: {:ok, value}
+  def load(_opts, _loader, value), do: {:ok, value}
+
   def dump(_opts, value), do: {:ok, value}
+  def dump(_opts, _dumper, value), do: {:ok, value}
 
   # These are required by Ecto.ParameterizedType
   def embed_as(_opts, _format), do: :self
-  def equal?(opts, a, b), do: a == b
-
-  # Dump with options and dumper function (3-arity version for ParameterizedType)
-  def dump(value, _dumper, _opts), do: {:ok, value}
+  def equal?(_opts, a, b), do: a == b
 
   # JSON Schema generation
   def to_json_schema(opts, context \\ %{}) do

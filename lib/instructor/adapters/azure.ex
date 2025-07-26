@@ -5,7 +5,11 @@ defmodule Instructor.Adapters.Azure do
   @behaviour Instructor.Adapter
   @supported_modes [:tools, :json, :md_json, :json_schema]
 
-  @default_model "o3-mini"
+  @default_model "gpt-4o"
+  # 2 minutes
+  @default_timeout 120_000
+  # 20 seconds between chunks
+  @default_stream_timeout 20_000
 
   alias Instructor.JSONSchema
   alias Instructor.SSEStreamParser
@@ -20,6 +24,8 @@ defmodule Instructor.Adapters.Azure do
     {_, params} = Keyword.pop(params, :validation_context)
     {_, params} = Keyword.pop(params, :max_retries)
     {mode, params} = Keyword.pop(params, :mode)
+    {timeout, params} = Keyword.pop(params, :timeout, @default_timeout)
+    {stream_timeout, params} = Keyword.pop(params, :stream_timeout, @default_stream_timeout)
     stream = Keyword.get(params, :stream, false)
     params = Enum.into(params, %{})
 
@@ -38,9 +44,9 @@ defmodule Instructor.Adapters.Azure do
       end
 
     if stream do
-      do_streaming_chat_completion(mode, params, config)
+      do_streaming_chat_completion(mode, params, config, timeout, stream_timeout)
     else
-      do_chat_completion(mode, params, config)
+      do_chat_completion(mode, params, config, timeout)
     end
   end
 
@@ -93,39 +99,59 @@ defmodule Instructor.Adapters.Azure do
     []
   end
 
-  defp do_streaming_chat_completion(mode, params, config) do
+  defp do_streaming_chat_completion(mode, params, config, initial_timeout, stream_timeout) do
     pid = self()
-    options = http_options(config)
+    options = http_options(config, initial_timeout)
     ref = make_ref()
 
     Stream.resource(
       fn ->
-        Task.async(fn ->
-          options =
-            Keyword.merge(options, [
-              auth_header(config),
-              json: params,
-              into: fn {:data, data}, {req, resp} ->
-                send(pid, {ref, data})
-                {:cont, {req, resp}}
-              end
-            ])
+        task =
+          Task.async(fn ->
+            options =
+              Keyword.merge(options, [
+                auth_header(config),
+                json: params,
+                into: fn {:data, data}, {req, resp} ->
+                  send(pid, {ref, data})
+                  {:cont, {req, resp}}
+                end
+              ])
 
-          Req.post(url(config), options)
-          send(pid, {ref, :done})
-        end)
+            Req.post(url(config), options)
+            send(pid, {ref, :done})
+          end)
+
+        # Return task with initial state
+        {task, :initial}
       end,
-      fn task ->
-        receive do
-          {^ref, :done} ->
-            {:halt, task}
+      fn
+        # Initial state - waiting for first chunk
+        {task, :initial} ->
+          receive do
+            {^ref, :done} ->
+              {:halt, task}
 
-          {^ref, data} ->
-            {[data], task}
-        after
-          120_000 ->
-            raise "Timeout waiting for LLM call to receive streaming data"
-        end
+            {^ref, data} ->
+              # Got first chunk, switch to streaming state
+              {[data], {task, :streaming}}
+          after
+            initial_timeout ->
+              raise "Timeout waiting for LLM call to start streaming"
+          end
+
+        # Streaming state - shorter timeout between chunks
+        {task, :streaming} ->
+          receive do
+            {^ref, :done} ->
+              {:halt, task}
+
+            {^ref, data} ->
+              {[data], {task, :streaming}}
+          after
+            stream_timeout ->
+              raise "Timeout waiting for next chunk in stream"
+          end
       end,
       fn _ -> nil end
     )
@@ -136,8 +162,8 @@ defmodule Instructor.Adapters.Azure do
     end)
   end
 
-  defp do_chat_completion(mode, params, config) do
-    options = Keyword.merge(http_options(config), [auth_header(config), json: params])
+  defp do_chat_completion(mode, params, config, timeout) do
+    options = Keyword.merge(http_options(config, timeout), [auth_header(config), json: params])
 
     with {:ok, %Req.Response{status: 200, body: body} = response} <-
            Req.post(url(config), options),
@@ -227,8 +253,8 @@ defmodule Instructor.Adapters.Azure do
     end
   end
 
-  defp http_options(_config) do
-    [receive_timeout: 120_000, retry: :transient, max_retries: 1]
+  defp http_options(_config, timeout) do
+    [receive_timeout: timeout, retry: :transient, max_retries: 1]
   end
 
   defp config(nil, params), do: config(Application.get_env(:instructor, :azure, []), params)

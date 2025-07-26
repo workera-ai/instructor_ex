@@ -28,7 +28,7 @@ defmodule Instructor.Types.Enum do
   def type(_opts), do: :string
 
   # Cast with options
-  def cast(value, opts) when is_binary(value), do: {:ok, value}
+  def cast(value, _opts) when is_binary(value), do: {:ok, value}
   def cast(_value, _opts), do: :error
 
   # Load/dump with options
@@ -37,7 +37,7 @@ defmodule Instructor.Types.Enum do
 
   # These are required by Ecto.ParameterizedType
   def embed_as(_opts, _format), do: :self
-  def equal?(opts, a, b), do: a == b
+  def equal?(_opts, a, b), do: a == b
 
   # Dump with options and dumper function (3-arity version for ParameterizedType)
   def dump(value, _dumper, _opts), do: {:ok, value}
