@@ -28,25 +28,27 @@ defmodule Instructor.Types.Integer do
   def type(_opts), do: :integer
 
   # Cast with options
-  def cast(value, opts) when is_integer(value), do: {:ok, value}
-  def cast(value, opts) when is_binary(value) do
+  def cast(value, _opts) when is_integer(value), do: {:ok, value}
+
+  def cast(value, _opts) when is_binary(value) do
     case Integer.parse(value) do
       {int, ""} -> {:ok, int}
       _ -> :error
     end
   end
+
   def cast(_opts, _), do: :error
 
   # Load/dump with options
   def load(_opts, value), do: {:ok, value}
+  def load(_opts, _loader, value), do: {:ok, value}
+
   def dump(_opts, value), do: {:ok, value}
+  def dump(_opts, _dumper, value), do: {:ok, value}
 
   # These are required by Ecto.ParameterizedType
   def embed_as(_opts, _format), do: :self
-  def equal?(opts, a, b), do: a == b
-
-  # Dump with options and dumper function (3-arity version for ParameterizedType)
-  def dump(value, _dumper, _opts), do: {:ok, value}
+  def equal?(_opts, a, b), do: a == b
 
   # JSON Schema generation
   def to_json_schema(opts, context \\ %{}) do
@@ -62,6 +64,9 @@ defmodule Instructor.Types.Integer do
   end
 
   defp maybe_add(map, _key, nil, _context), do: map
-  defp maybe_add(map, key, value, context) when is_function(value, 1), do: Map.put(map, key, value.(context))
+
+  defp maybe_add(map, key, value, context) when is_function(value, 1),
+    do: Map.put(map, key, value.(context))
+
   defp maybe_add(map, key, value, _context), do: Map.put(map, key, value)
 end

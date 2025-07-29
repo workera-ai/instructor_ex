@@ -45,15 +45,14 @@ defmodule Mix.Tasks.Instructor.TestTypes do
     # Generate JSON schema
     json_schema = Instructor.JSONSchema.from_ecto_schema(TestSchema, %{status: "active"})
 
-    # Pretty print the schema
     IO.puts("Generated JSON Schema:")
-    IO.puts(JSON.encode!(JSON.decode!(json_schema), pretty: true))
+    IO.puts(JSON.encode!(JSON.decode!(json_schema)))
 
     Instructor.chat_completion(
       [
         model: "gpt-4o-mini",
         response_model: {TestSchema, %{status: "active"}},
-        mode: :json,
+        mode: :json_schema,
         messages: [
           %{
             role: "user",
@@ -63,5 +62,6 @@ defmodule Mix.Tasks.Instructor.TestTypes do
       ],
       adapter: Instructor.Adapters.OpenAI
     )
+    |> IO.inspect()
   end
 end

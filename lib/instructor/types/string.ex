@@ -27,9 +27,9 @@ defmodule Instructor.Types.String do
   def type(_opts), do: :string
 
   # Cast with options
-  def cast(value, opts) when is_binary(value), do: {:ok, value}
+  def cast(value, _opts) when is_binary(value), do: {:ok, value}
 
-  def cast(value, opts) do
+  def cast(_value, _opts) do
     :error
   end
 
@@ -47,7 +47,7 @@ defmodule Instructor.Types.String do
 
   # These are required by Ecto.ParameterizedType
   def embed_as(_opts, _format), do: :self
-  def equal?(opts, a, b), do: a == b
+  def equal?(_opts, a, b), do: a == b
 
   # JSON Schema generation
   def to_json_schema(opts, context \\ %{}) do

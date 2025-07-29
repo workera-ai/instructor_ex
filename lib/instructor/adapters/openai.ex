@@ -5,8 +5,14 @@ defmodule Instructor.Adapters.OpenAI do
   @behaviour Instructor.Adapter
   @supported_modes [:tools, :json, :md_json, :json_schema]
 
+  # 2 minutes
+  @default_timeout 120_000
+  # 20 seconds between chunks
+  @default_stream_timeout 20_000
+
   alias Instructor.JSONSchema
   alias Instructor.SSEStreamParser
+  alias Instructor.Utils
 
   @impl true
   def chat_completion(params, user_config \\ nil) do
@@ -17,6 +23,8 @@ defmodule Instructor.Adapters.OpenAI do
     {_, params} = Keyword.pop(params, :validation_context)
     {_, params} = Keyword.pop(params, :max_retries)
     {mode, params} = Keyword.pop(params, :mode)
+    {timeout, params} = Keyword.pop(params, :timeout, @default_timeout)
+    {stream_timeout, params} = Keyword.pop(params, :stream_timeout, @default_stream_timeout)
     stream = Keyword.get(params, :stream, false)
     params = Enum.into(params, %{})
 
@@ -35,9 +43,9 @@ defmodule Instructor.Adapters.OpenAI do
       end
 
     if stream do
-      do_streaming_chat_completion(mode, params, config)
+      do_streaming_chat_completion(mode, params, config, timeout, stream_timeout)
     else
-      do_chat_completion(mode, params, config)
+      do_chat_completion(mode, params, config, timeout)
     end
   end
 
@@ -90,48 +98,72 @@ defmodule Instructor.Adapters.OpenAI do
     []
   end
 
-  defp do_streaming_chat_completion(mode, params, config) do
+  defp do_streaming_chat_completion(mode, params, config, initial_timeout, stream_timeout) do
     pid = self()
-    options = http_options(config)
+    options = http_options(config, initial_timeout)
     ref = make_ref()
 
     Stream.resource(
       fn ->
-        Task.async(fn ->
-          options =
-            Keyword.merge(options, [
-              auth_header(config),
-              json: params,
-              into: fn {:data, data}, {req, resp} ->
-                send(pid, {ref, data})
-                {:cont, {req, resp}}
-              end
-            ])
+        task =
+          Task.async(fn ->
+            options =
+              Keyword.merge(options, [
+                auth_header(config),
+                json: params,
+                into: fn {:data, data}, {req, resp} ->
+                  send(pid, {ref, data})
+                  {:cont, {req, resp}}
+                end
+              ])
 
-          Req.post(url(config), options)
-          send(pid, {ref, :done})
-        end)
+            Req.post(url(config), options)
+            send(pid, {ref, :done})
+          end)
+
+        # Return task with initial state
+        {task, :initial}
       end,
-      fn task ->
-        receive do
-          {^ref, :done} ->
-            {:halt, task}
+      fn
+        # Initial state - waiting for first chunk
+        {task, :initial} ->
+          receive do
+            {^ref, :done} ->
+              {:halt, task}
 
-          {^ref, data} ->
-            {[data], task}
-        after
-          120_000 ->
-            raise "Timeout waiting for LLM call to receive streaming data"
-        end
+            {^ref, data} ->
+              # Got first chunk, switch to streaming state
+              dbg(data_initial: data)
+              {[data], {task, :streaming}}
+          after
+            initial_timeout ->
+              raise "Timeout waiting for LLM call to start streaming"
+          end
+
+        # Streaming state - shorter timeout between chunks
+        {task, :streaming} ->
+          receive do
+            {^ref, :done} ->
+              {:halt, task}
+
+            {^ref, data} ->
+              {[data], {task, :streaming}}
+          after
+            stream_timeout ->
+              raise "Timeout waiting for next chunk in stream"
+          end
       end,
       fn _ -> nil end
     )
     |> SSEStreamParser.parse()
-    |> Stream.map(fn chunk -> parse_stream_chunk_for_mode(mode, chunk) end)
+    |> Utils.guard_repetitive_chunks()
+    |> Stream.map(fn chunk ->
+      parse_stream_chunk_for_mode(mode, chunk)
+    end)
   end
 
-  defp do_chat_completion(mode, params, config) do
-    options = Keyword.merge(http_options(config), [auth_header(config), json: params])
+  defp do_chat_completion(mode, params, config, timeout) do
+    options = Keyword.merge(http_options(config, timeout), [auth_header(config), json: params])
 
     with {:ok, %Req.Response{status: 200, body: body} = response} <-
            Req.post(url(config), options),
@@ -219,7 +251,9 @@ defmodule Instructor.Adapters.OpenAI do
     end
   end
 
-  defp http_options(config), do: Keyword.fetch!(config, :http_options)
+  defp http_options(_config, timeout) do
+    [receive_timeout: timeout, retry: :transient, max_retries: 1]
+  end
 
   defp config(nil), do: config(Application.get_env(:instructor, :openai, []))
 
@@ -230,8 +264,7 @@ defmodule Instructor.Adapters.OpenAI do
           api_url: "https://api.openai.com",
           api_path: "/v1/chat/completions",
           api_key: System.get_env("OPENAI_API_KEY"),
-          auth_mode: :bearer,
-          http_options: [receive_timeout: 60_000]
+          auth_mode: :bearer
         ],
         Application.get_env(:instructor, :openai, [])
       )
