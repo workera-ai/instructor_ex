@@ -397,6 +397,7 @@ defmodule Instructor do
 
         changeset = cast_all(model, params)
         model = changeset |> Ecto.Changeset.apply_changes()
+
         {[{:partial, model}], changeset}
       end,
       # last
