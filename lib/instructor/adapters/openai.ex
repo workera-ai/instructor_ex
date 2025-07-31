@@ -133,7 +133,6 @@ defmodule Instructor.Adapters.OpenAI do
 
             {^ref, data} ->
               # Got first chunk, switch to streaming state
-              dbg(data_initial: data)
               {[data], {task, :streaming}}
           after
             initial_timeout ->
