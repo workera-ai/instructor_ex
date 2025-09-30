@@ -136,7 +136,7 @@ defmodule Instructor do
           {{:partial, {:array, response_model}}, context}
 
         {:partial, {:array, response_model}} ->
-          {:partial, {:array, response_model}, %{}}
+          {{:partial, {:array, response_model}}, %{}}
 
         {:partial, {response_model, context}} ->
           {{:partial, response_model}, context}
@@ -449,10 +449,14 @@ defmodule Instructor do
     end)
   end
 
-  defp do_chat_completion(response_model, params, config, schema_context \\ %{}) do
+  defp do_chat_completion(response_model, params, config, schema_context) do
     validation_context = Keyword.get(params, :validation_context, %{})
     max_retries = Keyword.get(params, :max_retries)
     mode = Keyword.get(params, :mode, :json_schema)
+    functions = Keyword.get(params, :functions, [])
+    
+    # Keep original params for recursive calls
+    original_params = params
     params = params_for_mode(mode, response_model, params, schema_context)
 
     model =
@@ -462,52 +466,159 @@ defmodule Instructor do
         {%{}, response_model}
       end
 
-    with {:ok, raw_response, params} <- do_adapter_chat_completion(params, config),
-         {%Ecto.Changeset{valid?: true} = changeset, raw_response} <-
-           {cast_all(model, params), raw_response},
-         {%Ecto.Changeset{valid?: true} = changeset, _raw_response} <-
-           {call_validate(response_model, changeset, validation_context), raw_response} do
-      {:ok, changeset |> Ecto.Changeset.apply_changes()}
+    with {:ok, raw_response, content} <- do_adapter_chat_completion(params, config) do
+      # Check if this is a tool call response AND we have functions to execute
+      case {get_tool_calls(raw_response), length(functions) > 0} do
+        {nil, _} ->
+          # Normal structured output response - existing validation logic
+          with {%Ecto.Changeset{valid?: true} = changeset, raw_response} <-
+                 {cast_all(model, content), raw_response},
+               {%Ecto.Changeset{valid?: true} = changeset, _raw_response} <-
+                 {call_validate(response_model, changeset, validation_context), raw_response} do
+            {:ok, changeset |> Ecto.Changeset.apply_changes()}
+          else
+            {%Ecto.Changeset{} = changeset, raw_response} ->
+              IO.puts("in else")
+
+              if max_retries > 0 do
+                errors = Instructor.ErrorFormatter.format_errors(changeset)
+
+                Logger.debug("Retrying LLM call for #{inspect(response_model)}:\n\n #{inspect(errors)}",
+                  errors: errors
+                )
+
+                updated_params =
+                  original_params
+                  |> Keyword.put(:max_retries, max_retries - 1)
+                  |> Keyword.update(:messages, [], fn messages ->
+                    messages ++
+                      reask_messages(raw_response, params, config) ++
+                      [
+                        %{
+                          role: "system",
+                          content: """
+                          The response did not pass validation. Please try again and fix the following validation errors:\n
+
+                          #{errors}
+                          """
+                        }
+                      ]
+                  end)
+
+                do_chat_completion(response_model, updated_params, config, schema_context)
+              else
+                {:error, changeset}
+              end
+          end
+          
+        {tool_calls, true} ->
+          # Execute functions and recursively call with results
+          handle_tool_calls(tool_calls, functions, raw_response, original_params, config, response_model, schema_context)
+          
+        {_tool_calls, false} ->
+          # Tool calls exist but no functions provided - treat as normal response
+          # This handles the existing :tools mode behavior
+          with {%Ecto.Changeset{valid?: true} = changeset, raw_response} <-
+                 {cast_all(model, content), raw_response},
+               {%Ecto.Changeset{valid?: true} = changeset, _raw_response} <-
+                 {call_validate(response_model, changeset, validation_context), raw_response} do
+            {:ok, changeset |> Ecto.Changeset.apply_changes()}
+          else
+            {%Ecto.Changeset{} = changeset, raw_response} ->
+              IO.puts("in else")
+
+              if max_retries > 0 do
+                errors = Instructor.ErrorFormatter.format_errors(changeset)
+
+                Logger.debug("Retrying LLM call for #{inspect(response_model)}:\n\n #{inspect(errors)}",
+                  errors: errors
+                )
+
+                updated_params =
+                  original_params
+                  |> Keyword.put(:max_retries, max_retries - 1)
+                  |> Keyword.update(:messages, [], fn messages ->
+                    messages ++
+                      reask_messages(raw_response, params, config) ++
+                      [
+                        %{
+                          role: "system",
+                          content: """
+                          The response did not pass validation. Please try again and fix the following validation errors:\n
+
+                          #{errors}
+                          """
+                        }
+                      ]
+                  end)
+
+                do_chat_completion(response_model, updated_params, config, schema_context)
+              else
+                {:error, changeset}
+              end
+          end
+      end
     else
-      {%Ecto.Changeset{} = changeset, raw_response} ->
-        IO.puts("in else")
-
-        if max_retries > 0 do
-          errors = Instructor.ErrorFormatter.format_errors(changeset)
-
-          Logger.debug("Retrying LLM call for #{inspect(response_model)}:\n\n #{inspect(errors)}",
-            errors: errors
-          )
-
-          params =
-            params
-            |> Keyword.put(:max_retries, max_retries - 1)
-            |> Keyword.update(:messages, [], fn messages ->
-              messages ++
-                reask_messages(raw_response, params, config) ++
-                [
-                  %{
-                    role: "system",
-                    content: """
-                    The response did not pass validation. Please try again and fix the following validation errors:\n
-
-                    #{errors}
-                    """
-                  }
-                ]
-            end)
-
-          do_chat_completion(response_model, params, config)
-        else
-          {:error, changeset}
-        end
-
       {:error, reason} ->
         {:error, reason}
 
       e ->
         {:error, e}
     end
+  end
+  
+  # Helper to detect tool calls in response
+  defp get_tool_calls(%{"choices" => [%{"message" => %{"tool_calls" => tool_calls}}]}) 
+    when is_list(tool_calls) and length(tool_calls) > 0, do: tool_calls
+  defp get_tool_calls(_), do: nil
+  
+  # Helper to execute tools and recurse
+  defp handle_tool_calls(tool_calls, functions, raw_response, original_params, config, response_model, schema_context) do
+    # Convert functions list to a map for easy lookup
+    functions_map = Map.new(functions, fn f -> {f.name, f} end)
+    
+    # Execute each tool call
+    tool_results = Enum.map(tool_calls, fn tc ->
+      function_name = tc["function"]["name"]
+      args = JSON.decode!(tc["function"]["arguments"])
+      
+      result = case Map.get(functions_map, function_name) do
+        nil -> 
+          {:error, "Unknown function: #{function_name}"}
+        func -> 
+          Instructor.Function.execute(func, args)
+      end
+      
+      %{
+        "tool_call_id" => tc["id"],
+        "role" => "tool",
+        "name" => function_name,
+        "content" => case result do
+          {:ok, content} -> JSON.encode!(content)
+          {:error, error} -> JSON.encode!(%{error: error})
+        end
+      }
+    end)
+    
+    # Build conversation with tool results
+    assistant_msg = raw_response["choices"] |> List.first() |> Map.get("message")
+    
+    # Get original messages from params (which is a Keyword list)
+    original_messages = Keyword.get(original_params, :messages, [])
+    
+    updated_messages = 
+      original_messages ++
+      [assistant_msg] ++  # Assistant message with tool_calls
+      tool_results         # Tool results
+    
+    # Recursively call to get final answer
+    # Build new params, clearing functions to get final structured response
+    updated_params = original_params
+      |> Keyword.put(:messages, updated_messages)
+      |> Keyword.delete(:functions)
+      |> Keyword.delete(:tools)  # Remove tools to get structured response
+    
+    do_chat_completion(response_model, updated_params, config, schema_context)
   end
 
   defp do_adapter_chat_completion(params, config) do
@@ -545,15 +656,29 @@ defmodule Instructor do
         })
 
       :json_schema ->
-        params
-        |> Keyword.put(:response_format, %{
-          type: "json_schema",
-          json_schema: %{
-            schema: JSON.decode!(json_schema),
-            name: "schema",
-            strict: true
-          }
-        })
+        # Check if functions are provided for tool calling
+        case Keyword.get(params, :functions) do
+          nil ->
+            # Standard structured output mode
+            params
+            |> Keyword.put(:response_format, %{
+              type: "json_schema",
+              json_schema: %{
+                schema: JSON.decode!(json_schema),
+                name: "schema",
+                strict: true
+              }
+            })
+            
+          functions when is_list(functions) ->
+            # Function calling mode - convert functions to tools
+            tools = Enum.map(functions, &Instructor.Function.to_tool/1)
+            
+            params
+            |> Keyword.put(:tools, tools)
+            |> Keyword.delete(:functions)
+            # Don't set response_format for tool calls
+        end
 
       :tools ->
         params

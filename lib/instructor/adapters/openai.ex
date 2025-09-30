@@ -164,10 +164,18 @@ defmodule Instructor.Adapters.OpenAI do
   defp do_chat_completion(mode, params, config, timeout) do
     options = Keyword.merge(http_options(config, timeout), [auth_header(config), json: params])
 
-    with {:ok, %Req.Response{status: 200, body: body} = response} <-
-           Req.post(url(config), options),
-         {:ok, content} <- parse_response_for_mode(mode, body) do
-      {:ok, response, content}
+    with {:ok, %Req.Response{status: 200, body: body}} <-
+           Req.post(url(config), options) do
+      # Check if this is a tool call response (when tools are present)
+      case parse_response_for_mode(mode, body, params) do
+        {:ok, content} ->
+          {:ok, body, content}
+        {:tool_calls, _} ->
+          # Return the full response body for tool calls
+          {:ok, body, nil}
+        error ->
+          error
+      end
     else
       {:ok, %Req.Response{status: status, body: body}} ->
         {:error, "Unexpected HTTP response code: #{status}\n#{inspect(body)}"}
@@ -181,21 +189,43 @@ defmodule Instructor.Adapters.OpenAI do
          "choices" => [
            %{"message" => %{"tool_calls" => [%{"function" => %{"arguments" => args}}]}}
          ]
-       }),
+       }, _params),
        do: JSON.decode(args)
 
-  defp parse_response_for_mode(:md_json, %{"choices" => [%{"message" => %{"content" => content}}]}),
+  defp parse_response_for_mode(:md_json, %{"choices" => [%{"message" => %{"content" => content}}]}, _params),
        do: JSON.decode(content)
 
-  defp parse_response_for_mode(:json, %{"choices" => [%{"message" => %{"content" => content}}]}),
+  defp parse_response_for_mode(:json, %{"choices" => [%{"message" => %{"content" => content}}]}, _params),
     do: JSON.decode(content)
 
+  # Handle both tool calls and regular json_schema responses
   defp parse_response_for_mode(:json_schema, %{
-         "choices" => [%{"message" => %{"content" => content}}]
-       }),
-       do: JSON.decode(content)
+         "choices" => [%{"message" => msg}]
+       } = response, params) do
+    case msg do
+      %{"tool_calls" => tool_calls} when is_list(tool_calls) ->
+        # Check if we have tools in the params (indicating function calling mode)
+        has_tools = cond do
+          is_map(params) -> Map.has_key?(params, :tools) or Map.has_key?(params, "tools")
+          is_list(params) -> Keyword.has_key?(params, :tools) or Keyword.has_key?(params, "tools")
+          true -> false
+        end
+        
+        if has_tools do
+          {:tool_calls, response}
+        else
+          # Shouldn't happen but handle gracefully
+          {:error, "Unexpected tool_calls in response without tools in request"}
+        end
+      %{"content" => content} ->
+        # Normal json_schema structured output
+        JSON.decode(content)
+      _ ->
+        {:error, "Unexpected response format for json_schema mode"}
+    end
+  end
 
-  defp parse_response_for_mode(mode, response) do
+  defp parse_response_for_mode(mode, response, _params) do
     {:error, "Unsupported OpenAI mode #{mode} with response #{inspect(response)}"}
   end
 
